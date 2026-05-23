@@ -2,6 +2,7 @@ type: custom:rdio-scanner-card
 mode: native
 title: Rdio Scanner
 url: http://192.168.1.49:3000
+# ws_url: wss://your-secure-rdio-proxy.example/ws
 status_entity: sensor.rdio_scanner_status
 systems_entity: sensor.rdio_scanner_systems
 talkgroups_entity: sensor.rdio_scanner_talkgroups

@@ -40,6 +40,7 @@ type: custom:rdio-scanner-card
 mode: native
 title: Rdio Scanner
 url: http://192.168.1.49:3000
+# ws_url: wss://your-secure-rdio-proxy.example/ws
 # access_code: "your-unlock-code"
 status_entity: sensor.rdio_scanner_status
 systems_entity: sensor.rdio_scanner_systems
@@ -63,6 +64,7 @@ field and remembers the code in browser localStorage after you enter it.
 | `mode` | no | `native` | `native` for direct live feed, or `iframe` for the original embedded UI |
 | `title` | no | `Rdio Scanner` | Header title |
 | `url` | no | `http://192.168.1.49:3000` | Rdio Scanner URL |
+| `ws_url` | no | derived from `url` | Override WebSocket URL, useful for `wss://` reverse proxies |
 | `access_code` | no | none | Rdio Scanner unlock code for restricted access |
 | `url_entity` | no | none | Entity containing the Rdio Scanner URL |
 | `status_entity` | no | `sensor.rdio_scanner_status` | Integration status sensor |
@@ -76,6 +78,7 @@ field and remembers the code in browser localStorage after you enter it.
 | `recordings_limit` | no | `20` | Number of recent recorded calls to request |
 | `auto_load_recordings` | no | `false` | Load recent recordings automatically after connection |
 | `audio_mode` | no | `auto` | `auto`, `html5`, or `webaudio`; use `html5` for difficult Android/iOS WebViews |
+| `allow_mixed_ws` | no | `false` | Allow `ws://` from an `https://` Home Assistant page; most mobile WebViews block this |
 
 ## Notes
 
@@ -86,6 +89,9 @@ field and remembers the code in browser localStorage after you enter it.
 - Android tablets, Fully Kiosk Browser, and the iOS Home Assistant app may work
   better with `audio_mode: html5`, which plays each call through a persistent
   hidden audio element instead of only WebAudio.
+- If the card shows **Blocked: use WSS**, Home Assistant is loaded over HTTPS
+  but Rdio Scanner is only available over insecure `ws://`. Use HTTP for the
+  dashboard, or put Rdio Scanner behind HTTPS/WSS and set `ws_url`.
 - Press **Load recent** in the recordings section to fetch recent recorded calls.
   Each row can be played through the card or downloaded as its original audio
   file.

@@ -7,6 +7,7 @@ class RdioScannerCard extends HTMLElement {
       mode: "native",
       title: "Rdio Scanner",
       url: "http://192.168.1.49:3000",
+      ws_url: "",
       access_code: "",
       status_entity: "sensor.rdio_scanner_status",
       systems_entity: "sensor.rdio_scanner_systems",
@@ -19,6 +20,7 @@ class RdioScannerCard extends HTMLElement {
       auto_load_recordings: false,
       recordings_limit: 20,
       audio_mode: "auto",
+      allow_mixed_ws: false,
     };
   }
 
@@ -41,6 +43,7 @@ class RdioScannerCard extends HTMLElement {
     this._configData = undefined;
     this._live = false;
     this._linked = false;
+    this._connectionStatus = "Stopped";
     this._authRequired = false;
     this._manualStop = false;
     this._reconnectTimer = undefined;
@@ -77,6 +80,7 @@ class RdioScannerCard extends HTMLElement {
   }
 
   getWsUrl() {
+    if (this.config.ws_url) return this.config.ws_url;
     return this.getUrl().replace(/^http/i, "ws");
   }
 
@@ -249,24 +253,40 @@ class RdioScannerCard extends HTMLElement {
     }
     if (this._ws && this._ws.readyState <= 1) return;
 
-    this.setNativeStatus("Connecting");
-    this._ws = new WebSocket(this.getWsUrl());
+    if (!this.config.allow_mixed_ws && window.location.protocol === "https:" && this.getWsUrl().startsWith("ws://")) {
+      this._connectionStatus = "Blocked: use WSS";
+      this.updateNativeUi();
+      return;
+    }
+
+    this._connectionStatus = "Connecting";
+    this.setNativeStatus(this._connectionStatus);
+    try {
+      this._ws = new WebSocket(this.getWsUrl());
+    } catch (error) {
+      this._connectionStatus = error?.message || "WebSocket failed";
+      this.updateNativeUi();
+      return;
+    }
     this._ws.onopen = () => {
       this._linked = true;
+      this._connectionStatus = "Connected";
       this.sendWs("VER");
       this.sendWs("CFG");
       this.updateNativeUi();
     };
     this._ws.onmessage = (event) => this.handleWsMessage(event.data);
     this._ws.onerror = () => {
-      this.setNativeStatus("Connection error");
+      this._connectionStatus = "Connection error";
+      this.setNativeStatus(this._connectionStatus);
       this.updateNativeUi();
     };
-    this._ws.onclose = () => {
+    this._ws.onclose = (event) => {
       this._linked = false;
       this._live = false;
+      this._connectionStatus = this.closeStatus(event);
       this.updateNativeUi();
-      if (!this._manualStop) {
+      if (!this._manualStop && this._connectionStatus !== "Blocked: use WSS") {
         window.clearTimeout(this._reconnectTimer);
         this._reconnectTimer = window.setTimeout(() => this.startNative(), 2500);
       }
@@ -288,6 +308,7 @@ class RdioScannerCard extends HTMLElement {
     }
     this._linked = false;
     this._live = false;
+    this._connectionStatus = "Stopped";
     this.updateNativeUi();
     if (options.reconnect) this.startNative();
   }
@@ -304,17 +325,20 @@ class RdioScannerCard extends HTMLElement {
     const [command, payload, flag] = message;
     if (command === "PIN") {
       this._authRequired = true;
+      this._connectionStatus = "Unlock required";
       this.updateNativeUi();
       const savedCode = this.getAccessCode();
       if (savedCode) this.sendAccessCode(savedCode, { save: false });
     } else if (command === "CFG") {
       this._authRequired = false;
+      this._connectionStatus = "Connected";
       this._configData = payload;
       this.subscribeAllTalkgroups();
       if (this.config.auto_load_recordings) this.loadRecordings();
       this.updateNativeUi();
     } else if (command === "LFM") {
       this._live = Boolean(payload);
+      if (this._live) this._connectionStatus = "Live feed on";
       this.updateNativeUi();
     } else if (command === "CAL" && payload) {
       const call = this.decorateCall(payload);
@@ -329,9 +353,11 @@ class RdioScannerCard extends HTMLElement {
       this.updateRecordingsUi();
     } else if (command === "XPR") {
       this._authRequired = true;
-      this.setNativeStatus("Access expired");
+      this._connectionStatus = "Access expired";
+      this.setNativeStatus(this._connectionStatus);
     } else if (command === "MAX") {
-      this.setNativeStatus("Too many listeners");
+      this._connectionStatus = "Too many listeners";
+      this.setNativeStatus(this._connectionStatus);
     }
   }
 
@@ -434,20 +460,24 @@ class RdioScannerCard extends HTMLElement {
     if (!this._call && !this.isAudioPlaying()) this.playNext();
   }
 
-  downloadCall(call) {
+  async downloadCall(call) {
     if (!call?.audio?.data) return;
 
     const bytes = new Uint8Array(call.audio.data);
     const blob = new Blob([bytes], { type: call.audioType || "audio/*" });
+    const filename = call.audioName || `rdio-call-${call.id || Date.now()}.wav`;
+    if (await this.shareFile(blob, filename)) return;
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = call.audioName || `rdio-call-${call.id || Date.now()}.wav`;
+    link.download = filename;
     link.style.display = "none";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), opened ? 30000 : 5000);
   }
 
   async playNext() {
@@ -617,7 +647,7 @@ class RdioScannerCard extends HTMLElement {
 
     const systems = Array.isArray(this._configData?.systems) ? this._configData.systems : undefined;
     const talkgroupCount = systems?.reduce((count, system) => count + (Array.isArray(system.talkgroups) ? system.talkgroups.length : 0), 0);
-    const status = this._authRequired ? "Unlock required" : this._live ? "Live feed on" : this._linked ? "Connected" : "Stopped";
+    const status = this._authRequired ? "Unlock required" : this._live ? "Live feed on" : this._linked ? "Connected" : this._connectionStatus;
     const call = this._call;
     const talkgroup = call?.talkgroupData;
     const system = call?.systemData;
@@ -704,6 +734,26 @@ class RdioScannerCard extends HTMLElement {
       this.formatCaller(call),
     ].filter(Boolean);
     return parts.join(" - ");
+  }
+
+  closeStatus(event) {
+    if (!event) return "Connection closed";
+    if (event.code === 1006 && window.location.protocol === "https:" && this.getWsUrl().startsWith("ws://")) {
+      return "Blocked: use WSS";
+    }
+    return event.code ? `Closed ${event.code}` : "Connection closed";
+  }
+
+  async shareFile(blob, filename) {
+    try {
+      if (!navigator.canShare || !navigator.share || typeof File === "undefined") return false;
+      const file = new File([blob], filename, { type: blob.type || "audio/wav" });
+      if (!navigator.canShare({ files: [file] })) return false;
+      await navigator.share({ files: [file], title: filename });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   setText(selector, value) {
