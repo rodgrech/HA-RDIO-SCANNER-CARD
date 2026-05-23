@@ -17,11 +17,17 @@ class RdioScannerCard extends HTMLElement {
       ...RdioScannerCard.getStubConfig(),
       ...config,
     };
+    this._rendered = false;
+    this._iframeUrl = undefined;
   }
 
   set hass(hass) {
     this._hass = hass;
-    this.render();
+    if (this._rendered) {
+      this.updateHeader();
+    } else {
+      this.render();
+    }
   }
 
   getCardSize() {
@@ -46,10 +52,12 @@ class RdioScannerCard extends HTMLElement {
     if (!this.config) return;
 
     const url = this.getUrl();
-    const connected = this.value(this.config.status_entity, "Unknown").toLowerCase() === "connected";
-    const systems = this.value(this.config.systems_entity, "--");
-    const talkgroups = this.value(this.config.talkgroups_entity, "--");
     const height = Math.max(320, Number(this.config.height) || 640);
+
+    if (this._rendered && this._iframeUrl === url) {
+      this.updateHeader();
+      return;
+    }
 
     this.innerHTML = `
       <ha-card>
@@ -96,8 +104,12 @@ class RdioScannerCard extends HTMLElement {
             height: 8px;
             border-radius: 50%;
             display: inline-block;
-            background: ${connected ? "#34c759" : "#ff453a"};
-            box-shadow: 0 0 8px ${connected ? "rgba(52,199,89,.8)" : "rgba(255,69,58,.65)"};
+            background: #ff453a;
+            box-shadow: 0 0 8px rgba(255,69,58,.65);
+          }
+          .rdio-dot.connected {
+            background: #34c759;
+            box-shadow: 0 0 8px rgba(52,199,89,.8);
           }
           .rdio-status {
             display: inline-flex;
@@ -140,9 +152,9 @@ class RdioScannerCard extends HTMLElement {
           <div class="rdio-title">
             <div class="rdio-name">${this.escape(this.config.title)}</div>
             <div class="rdio-meta">
-              <span class="rdio-status"><span class="rdio-dot"></span>${this.escape(this.value(this.config.status_entity, "Unknown"))}</span>
-              <span>${this.escape(systems)} systems</span>
-              <span>${this.escape(talkgroups)} talkgroups</span>
+              <span class="rdio-status"><span class="rdio-dot"></span><span class="rdio-status-text">Unknown</span></span>
+              <span><span class="rdio-systems">--</span> systems</span>
+              <span><span class="rdio-talkgroups">--</span> talkgroups</span>
             </div>
           </div>
           <div class="rdio-actions">
@@ -161,6 +173,29 @@ class RdioScannerCard extends HTMLElement {
     this.querySelector(".rdio-open")?.addEventListener("click", () => {
       window.open(url, "_blank", "noopener,noreferrer");
     });
+
+    this._rendered = true;
+    this._iframeUrl = url;
+    this.updateHeader();
+  }
+
+  updateHeader() {
+    if (!this._rendered || !this._hass) return;
+
+    const status = this.value(this.config.status_entity, "Unknown");
+    const connected = status.toLowerCase() === "connected";
+    const systems = this.value(this.config.systems_entity, "--");
+    const talkgroups = this.value(this.config.talkgroups_entity, "--");
+
+    const dot = this.querySelector(".rdio-dot");
+    const statusText = this.querySelector(".rdio-status-text");
+    const systemsText = this.querySelector(".rdio-systems");
+    const talkgroupsText = this.querySelector(".rdio-talkgroups");
+
+    dot?.classList.toggle("connected", connected);
+    if (statusText) statusText.textContent = status;
+    if (systemsText) systemsText.textContent = systems;
+    if (talkgroupsText) talkgroupsText.textContent = talkgroups;
   }
 
   escape(value) {
