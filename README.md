@@ -1,6 +1,7 @@
 # Rdio Scanner Card
 
-A HACS dashboard card for embedding a local Rdio Scanner feed in Home Assistant.
+A HACS dashboard card for running a local Rdio Scanner live feed in Home
+Assistant.
 
 This card pairs with the Rdio Scanner integration:
 
@@ -34,34 +35,47 @@ JavaScript module
 
 ```yaml
 type: custom:rdio-scanner-card
+mode: native
 title: Rdio Scanner
 url: http://192.168.1.49:3000
+# access_code: "your-unlock-code"
 status_entity: sensor.rdio_scanner_status
 systems_entity: sensor.rdio_scanner_systems
 talkgroups_entity: sensor.rdio_scanner_talkgroups
-height: 640
+auto_start: true
+show_header: true
 ```
+
+If your Rdio Scanner server does not require an unlock code, omit
+`access_code`. If it does require one and you omit it, the card shows an unlock
+field.
 
 ## Options
 
 | Option | Required | Default | Description |
 | --- | --- | --- | --- |
 | `type` | yes | `custom:rdio-scanner-card` | Card type |
+| `mode` | no | `native` | `native` for direct live feed, or `iframe` for the original embedded UI |
 | `title` | no | `Rdio Scanner` | Header title |
 | `url` | no | `http://192.168.1.49:3000` | Rdio Scanner URL |
+| `access_code` | no | none | Rdio Scanner unlock code for restricted access |
 | `url_entity` | no | none | Entity containing the Rdio Scanner URL |
 | `status_entity` | no | `sensor.rdio_scanner_status` | Integration status sensor |
 | `systems_entity` | no | `sensor.rdio_scanner_systems` | Systems count sensor |
 | `talkgroups_entity` | no | `sensor.rdio_scanner_talkgroups` | Talkgroups count sensor |
-| `height` | no | `640` | Iframe height in pixels |
+| `height` | no | `640` | Iframe height in pixels when `mode: iframe` |
 | `show_header` | no | `true` | Show or hide the card header |
 | `live_header` | no | `false` | Keep updating header values after the iframe loads |
+| `auto_start` | no | `true` | Connect and subscribe to all talkgroups when the card loads in native mode |
 
 ## Notes
 
-If Home Assistant is served over HTTPS and Rdio Scanner is served over HTTP,
-some browsers may block the embedded frame as mixed content. Use HTTP for both
-on the LAN, or put Rdio Scanner behind HTTPS.
+- Native mode uses Rdio Scanner's browser WebSocket protocol directly.
+- Browser autoplay rules may require pressing **Start Live** once before audio
+  can play.
+- If Home Assistant is served over HTTPS and Rdio Scanner is served over HTTP,
+  some browsers may block the connection as mixed content. Use HTTP for both on
+  the LAN, or put Rdio Scanner behind HTTPS.
 
 ## License
 

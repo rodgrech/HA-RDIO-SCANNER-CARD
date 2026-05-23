@@ -1,7 +1,9 @@
 type: custom:rdio-scanner-card
+mode: native
 title: Rdio Scanner
 url: http://192.168.1.49:3000
 status_entity: sensor.rdio_scanner_status
 systems_entity: sensor.rdio_scanner_systems
 talkgroups_entity: sensor.rdio_scanner_talkgroups
-height: 640
+auto_start: true
+show_header: true
