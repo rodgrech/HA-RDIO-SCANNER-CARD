@@ -1,5 +1,7 @@
 # Rdio Scanner Card
 
+![Rdio Scanner Card logo](assets/hacs-icon.png)
+
 A HACS dashboard card for running a local Rdio Scanner live feed in Home
 Assistant.
 
@@ -45,6 +47,7 @@ talkgroups_entity: sensor.rdio_scanner_talkgroups
 auto_start: true
 show_recordings: true
 recordings_limit: 20
+audio_mode: auto
 show_header: true
 ```
 
@@ -72,6 +75,7 @@ field and remembers the code in browser localStorage after you enter it.
 | `show_recordings` | no | `true` | Show recent recorded-call controls in native mode |
 | `recordings_limit` | no | `20` | Number of recent recorded calls to request |
 | `auto_load_recordings` | no | `false` | Load recent recordings automatically after connection |
+| `audio_mode` | no | `auto` | `auto`, `html5`, or `webaudio`; use `html5` for difficult Android/iOS WebViews |
 
 ## Notes
 
@@ -79,6 +83,9 @@ field and remembers the code in browser localStorage after you enter it.
 - Browser autoplay rules may require pressing **Start Live** once before audio
   can play. The button primes WebAudio with a silent buffer before subscribing
   to live traffic.
+- Android tablets, Fully Kiosk Browser, and the iOS Home Assistant app may work
+  better with `audio_mode: html5`, which plays each call through a persistent
+  hidden audio element instead of only WebAudio.
 - Press **Load recent** in the recordings section to fetch recent recorded calls.
   Each row can be played through the card or downloaded as its original audio
   file.

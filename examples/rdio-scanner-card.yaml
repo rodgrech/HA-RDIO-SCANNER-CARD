@@ -8,4 +8,5 @@ talkgroups_entity: sensor.rdio_scanner_talkgroups
 auto_start: true
 show_recordings: true
 recordings_limit: 20
+audio_mode: auto
 show_header: true

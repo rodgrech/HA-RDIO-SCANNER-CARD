@@ -18,6 +18,7 @@ class RdioScannerCard extends HTMLElement {
       show_recordings: true,
       auto_load_recordings: false,
       recordings_limit: 20,
+      audio_mode: "auto",
     };
   }
 
@@ -32,6 +33,9 @@ class RdioScannerCard extends HTMLElement {
     this._ws = undefined;
     this._audioContext = undefined;
     this._audioSource = undefined;
+    this._htmlAudio = undefined;
+    this._audioObjectUrl = undefined;
+    this._htmlAudioPlaying = false;
     this._call = undefined;
     this._queue = [];
     this._configData = undefined;
@@ -113,6 +117,7 @@ class RdioScannerCard extends HTMLElement {
           .recordings-head{display:flex;align-items:center;gap:8px}.recordings-title{font-size:13px;font-weight:800}.recordings-head button{margin-left:auto;height:32px;border:0;border-radius:16px;cursor:pointer;color:var(--primary-text-color);background:rgba(255,255,255,.1);padding:0 11px;font-weight:700}
           .recordings-list{display:grid;gap:6px;max-height:220px;overflow:auto}.recording{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:7px 8px;border-radius:6px;background:rgba(255,255,255,.06)}.recording-main{min-width:0;display:grid;gap:2px}.recording-title{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.recording-sub{font-size:11px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.recording button{width:32px;height:32px;border:0;border-radius:50%;cursor:pointer;color:var(--primary-text-color);background:rgba(255,255,255,.1);padding:0}
           .foot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid rgba(255,255,255,.08);background:#181d22}.metric{padding:10px 12px;border-right:1px solid rgba(255,255,255,.08)}.metric:last-child{border-right:0}.label{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}.value{margin-top:3px;font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+          audio.rdio-audio{display:none}
           ha-icon{--mdc-icon-size:20px;width:20px;height:20px;vertical-align:middle}
         </style>
         <div class="native">
@@ -162,6 +167,7 @@ class RdioScannerCard extends HTMLElement {
             <div class="metric"><div class="label">Mode</div><div class="value mode-value">Native</div></div>
             <div class="metric"><div class="label">Audio</div><div class="value audio-value">Idle</div></div>
           </div>
+          <audio class="rdio-audio" playsinline preload="auto"></audio>
         </div>
       </ha-card>
     `;
@@ -177,6 +183,7 @@ class RdioScannerCard extends HTMLElement {
     this.querySelector(".access-code")?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") this.sendAccessCode();
     });
+    this._htmlAudio = this.querySelector(".rdio-audio");
 
     this._rendered = true;
     this.updateNativeUi();
@@ -424,7 +431,7 @@ class RdioScannerCard extends HTMLElement {
       this._queue.push(call);
     }
     this.updateNativeUi();
-    if (!this._call && !this._audioSource) this.playNext();
+    if (!this._call && !this.isAudioPlaying()) this.playNext();
   }
 
   downloadCall(call) {
@@ -444,7 +451,7 @@ class RdioScannerCard extends HTMLElement {
   }
 
   async playNext() {
-    if (this._audioSource || this._call) return;
+    if (this.isAudioPlaying() || this._call) return;
     const call = this._queue.shift();
     if (!call) {
       this.updateNativeUi();
@@ -453,11 +460,35 @@ class RdioScannerCard extends HTMLElement {
     this._call = call;
     this.updateNativeUi();
 
-    const audioContext = this.ensureAudio();
-    if (!audioContext) {
-      this.setNativeStatus("Tap Start for audio");
-      return;
+    const played = await this.playCallAudio(call);
+    if (!played) {
+      this._audioSource = undefined;
+      this._call = undefined;
+      this._htmlAudioPlaying = false;
+      this.updateNativeUi();
+      window.setTimeout(() => this.playNext(), 250);
     }
+  }
+
+  async playCallAudio(call) {
+    if (this.shouldUseHtmlAudio()) {
+      const htmlPlayed = await this.playWithHtmlAudio(call);
+      if (htmlPlayed) return true;
+    }
+
+    const webAudioPlayed = await this.playWithWebAudio(call);
+    if (webAudioPlayed) return true;
+
+    if (!this.shouldUseHtmlAudio()) {
+      return this.playWithHtmlAudio(call);
+    }
+
+    return false;
+  }
+
+  async playWithWebAudio(call) {
+    const audioContext = this.ensureAudio();
+    if (!audioContext) return false;
 
     try {
       if (audioContext.state === "suspended") await audioContext.resume();
@@ -473,12 +504,45 @@ class RdioScannerCard extends HTMLElement {
         window.setTimeout(() => this.playNext(), 250);
       };
       this._audioSource.start();
+      return true;
     } catch {
-      this._audioSource = undefined;
-      this._call = undefined;
-      this.setNativeStatus("Audio decode failed");
+      this.setNativeStatus("WebAudio failed");
+      return false;
+    }
+  }
+
+  async playWithHtmlAudio(call) {
+    const audio = this.ensureHtmlAudio();
+    if (!audio) return false;
+
+    try {
+      this.revokeAudioObjectUrl();
+      const bytes = new Uint8Array(call.audio.data);
+      const blob = new Blob([bytes], { type: call.audioType || "audio/wav" });
+      this._audioObjectUrl = URL.createObjectURL(blob);
+      audio.onended = () => {
+        this._htmlAudioPlaying = false;
+        this._call = undefined;
+        this.revokeAudioObjectUrl();
+        this.updateNativeUi();
+        window.setTimeout(() => this.playNext(), 250);
+      };
+      audio.onerror = () => {
+        this._htmlAudioPlaying = false;
+        this.setNativeStatus("HTML audio failed");
+        this.updateNativeUi();
+      };
+      audio.src = this._audioObjectUrl;
+      audio.volume = 1;
+      audio.muted = false;
+      this._htmlAudioPlaying = true;
+      await audio.play();
+      return true;
+    } catch {
+      this._htmlAudioPlaying = false;
+      this.setNativeStatus("Tap Start for audio");
       this.updateNativeUi();
-      window.setTimeout(() => this.playNext(), 250);
+      return false;
     }
   }
 
@@ -494,15 +558,27 @@ class RdioScannerCard extends HTMLElement {
 
   async primeAudio() {
     const audioContext = this.ensureAudio(true);
-    if (!audioContext) return;
+    const htmlAudio = this.ensureHtmlAudio();
 
     try {
-      if (audioContext.state === "suspended") await audioContext.resume();
-      const buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
-      const source = audioContext.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioContext.destination);
-      source.start();
+      if (audioContext) {
+        if (audioContext.state === "suspended") await audioContext.resume();
+        const buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.start();
+      }
+      if (htmlAudio) {
+        htmlAudio.muted = true;
+        htmlAudio.volume = 0;
+        htmlAudio.src = this.silentWavDataUri();
+        await htmlAudio.play();
+        htmlAudio.pause();
+        htmlAudio.currentTime = 0;
+        htmlAudio.muted = false;
+        htmlAudio.volume = 1;
+      }
     } catch {
       this.setNativeStatus("Tap Start for audio");
     }
@@ -514,6 +590,13 @@ class RdioScannerCard extends HTMLElement {
       this._audioSource.stop();
       this._audioSource.disconnect();
       this._audioSource = undefined;
+    }
+    if (this._htmlAudio) {
+      this._htmlAudio.pause();
+      this._htmlAudio.removeAttribute("src");
+      this._htmlAudio.load();
+      this._htmlAudioPlaying = false;
+      this.revokeAudioObjectUrl();
     }
     this._call = undefined;
   }
@@ -550,7 +633,7 @@ class RdioScannerCard extends HTMLElement {
     this.setText(".call-time", call?.dateTime ? new Date(call.dateTime).toLocaleTimeString() : "--");
     this.setText(".queue-count", this._queue.length);
     this.setText(".link-value", this._linked ? "Online" : "Offline");
-    this.setText(".audio-value", this._audioSource ? "Playing" : this._queue.length ? "Queued" : "Idle");
+    this.setText(".audio-value", this.isAudioPlaying() ? "Playing" : this._queue.length ? "Queued" : "Idle");
     this.querySelector(".unlock")?.classList.toggle("show", this._authRequired && !this.config.access_code);
   }
 
@@ -626,6 +709,32 @@ class RdioScannerCard extends HTMLElement {
   setText(selector, value) {
     const element = this.querySelector(selector);
     if (element) element.textContent = value ?? "--";
+  }
+
+  isAudioPlaying() {
+    return Boolean(this._audioSource || this._htmlAudioPlaying);
+  }
+
+  ensureHtmlAudio() {
+    if (!this._htmlAudio) this._htmlAudio = this.querySelector(".rdio-audio");
+    return this._htmlAudio;
+  }
+
+  shouldUseHtmlAudio() {
+    if (this.config.audio_mode === "html5") return true;
+    if (this.config.audio_mode === "webaudio") return false;
+    return /Android|iPhone|iPad|iPod|Mobile|wv|Fully/i.test(navigator.userAgent || "");
+  }
+
+  revokeAudioObjectUrl() {
+    if (this._audioObjectUrl) {
+      URL.revokeObjectURL(this._audioObjectUrl);
+      this._audioObjectUrl = undefined;
+    }
+  }
+
+  silentWavDataUri() {
+    return "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
   }
 
   escape(value) {
