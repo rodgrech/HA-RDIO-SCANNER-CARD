@@ -1,4 +1,6 @@
 class RdioScannerCard extends HTMLElement {
+  static STORAGE_KEY = "rdio-scanner-card-access-code";
+
   static getStubConfig() {
     return {
       type: "custom:rdio-scanner-card",
@@ -40,6 +42,7 @@ class RdioScannerCard extends HTMLElement {
     this._reconnectTimer = undefined;
     this._recordings = [];
     this._recordingsLoading = false;
+    this._storageKey = `${RdioScannerCard.STORAGE_KEY}:${this.getUrl()}`;
   }
 
   set hass(hass) {
@@ -104,7 +107,7 @@ class RdioScannerCard extends HTMLElement {
           .screen{display:grid;grid-template-rows:auto 1fr auto;gap:12px;padding:14px;background:radial-gradient(circle at 78% 12%,rgba(37,99,235,.18),transparent 28%),#101316}
           .lcd{min-height:142px;display:grid;gap:10px;align-content:center;padding:18px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:#07130d;color:#b7f56f;box-shadow:inset 0 0 28px rgba(89,255,120,.08);font-family:"Courier New",Consolas,monospace}
           .channel{font-size:clamp(26px,7vw,46px);font-weight:900;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.caller{font-size:clamp(16px,4vw,26px);font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.detail{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#7fbd62}
-          .unlock{display:none;grid-template-columns:minmax(0,1fr) auto;gap:8px}.unlock.show{display:grid}.unlock input{min-width:0;height:36px;padding:0 11px;border-radius:18px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:var(--primary-text-color)}
+          .unlock{display:none;grid-template-columns:minmax(0,1fr) auto auto;gap:8px}.unlock.show{display:grid}.unlock input{min-width:0;height:36px;padding:0 11px;border-radius:18px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:var(--primary-text-color)}
           .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.controls .primary{background:#2276d2}.controls .danger{background:#7f2a2a}.queue{margin-left:auto;color:var(--secondary-text-color);font-size:12px}
           .recordings{display:${this.config.show_recordings === false ? "none" : "grid"};gap:8px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(0,0,0,.18);padding:10px}
           .recordings-head{display:flex;align-items:center;gap:8px}.recordings-title{font-size:13px;font-weight:800}.recordings-head button{margin-left:auto;height:32px;border:0;border-radius:16px;cursor:pointer;color:var(--primary-text-color);background:rgba(255,255,255,.1);padding:0 11px;font-weight:700}
@@ -131,6 +134,7 @@ class RdioScannerCard extends HTMLElement {
             <div class="unlock">
               <input class="access-code" type="password" autocomplete="current-password" placeholder="Unlock code">
               <button type="button" class="unlock-button">Unlock</button>
+              <button type="button" class="clear-code">Clear saved</button>
             </div>
             <div class="lcd">
               <div class="channel">LIVE FEED</div>
@@ -169,6 +173,7 @@ class RdioScannerCard extends HTMLElement {
     this.querySelector(".native-open")?.addEventListener("click", () => window.open(this.getUrl(), "_blank", "noopener,noreferrer"));
     this.querySelector(".recordings-refresh")?.addEventListener("click", () => this.loadRecordings());
     this.querySelector(".unlock-button")?.addEventListener("click", () => this.sendAccessCode());
+    this.querySelector(".clear-code")?.addEventListener("click", () => this.clearAccessCode());
     this.querySelector(".access-code")?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") this.sendAccessCode();
     });
@@ -293,7 +298,8 @@ class RdioScannerCard extends HTMLElement {
     if (command === "PIN") {
       this._authRequired = true;
       this.updateNativeUi();
-      if (this.config.access_code) this.sendAccessCode(this.config.access_code);
+      const savedCode = this.getAccessCode();
+      if (savedCode) this.sendAccessCode(savedCode, { save: false });
     } else if (command === "CFG") {
       this._authRequired = false;
       this._configData = payload;
@@ -322,12 +328,44 @@ class RdioScannerCard extends HTMLElement {
     }
   }
 
-  sendAccessCode(code = undefined) {
+  sendAccessCode(code = undefined, options = {}) {
     const value = code ?? this.querySelector(".access-code")?.value ?? "";
     if (!value) return;
     this.sendWs("PIN", window.btoa(value));
+    if (options.save !== false) this.saveAccessCode(value);
     const input = this.querySelector(".access-code");
     if (input) input.value = "";
+  }
+
+  getAccessCode() {
+    if (this.config.access_code) return this.config.access_code;
+
+    try {
+      return window.localStorage.getItem(this._storageKey) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  saveAccessCode(code) {
+    if (this.config.access_code) return;
+
+    try {
+      window.localStorage.setItem(this._storageKey, code);
+    } catch {
+      this.setNativeStatus("Unable to save unlock code");
+    }
+  }
+
+  clearAccessCode() {
+    try {
+      window.localStorage.removeItem(this._storageKey);
+      const input = this.querySelector(".access-code");
+      if (input) input.value = "";
+      this.setNativeStatus("Saved code cleared");
+    } catch {
+      this.setNativeStatus("Unable to clear code");
+    }
   }
 
   subscribeAllTalkgroups() {

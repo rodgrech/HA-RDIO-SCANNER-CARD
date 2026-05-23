@@ -50,7 +50,7 @@ show_header: true
 
 If your Rdio Scanner server does not require an unlock code, omit
 `access_code`. If it does require one and you omit it, the card shows an unlock
-field.
+field and remembers the code in browser localStorage after you enter it.
 
 ## Options
 
@@ -82,6 +82,8 @@ field.
 - Press **Load recent** in the recordings section to fetch recent recorded calls.
   Each row can be played through the card or downloaded as its original audio
   file.
+- If you enter the unlock code in the card, it is saved in browser localStorage
+  for that scanner URL. Use **Clear saved** to remove it.
 - If Home Assistant is served over HTTPS and Rdio Scanner is served over HTTP,
   some browsers may block the connection as mixed content. Use HTTP for both on
   the LAN, or put Rdio Scanner behind HTTPS.
