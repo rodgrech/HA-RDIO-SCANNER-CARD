@@ -230,7 +230,11 @@ class RdioScannerCard extends HTMLElement {
   startNative(options = {}) {
     if (options.reconnect) this.stopNative({ reconnect: false });
     this._manualStop = false;
-    this.ensureAudio(options.userGesture);
+    if (options.userGesture) {
+      this.primeAudio();
+    } else {
+      this.ensureAudio();
+    }
     if (this._ws && this._ws.readyState <= 1) return;
 
     this.setNativeStatus("Connecting");
@@ -358,7 +362,7 @@ class RdioScannerCard extends HTMLElement {
   }
 
   playRecording(id) {
-    this.ensureAudio(true);
+    this.primeAudio();
     this.sendWs("CAL", `${id}`, "p");
   }
 
@@ -448,6 +452,22 @@ class RdioScannerCard extends HTMLElement {
     }
     if (userGesture) this._audioContext.resume();
     return this._audioContext;
+  }
+
+  async primeAudio() {
+    const audioContext = this.ensureAudio(true);
+    if (!audioContext) return;
+
+    try {
+      if (audioContext.state === "suspended") await audioContext.resume();
+      const buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioContext.destination);
+      source.start();
+    } catch {
+      this.setNativeStatus("Tap Start for audio");
+    }
   }
 
   stopAudio() {

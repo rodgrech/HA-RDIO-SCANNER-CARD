@@ -77,7 +77,8 @@ field.
 
 - Native mode uses Rdio Scanner's browser WebSocket protocol directly.
 - Browser autoplay rules may require pressing **Start Live** once before audio
-  can play.
+  can play. The button primes WebAudio with a silent buffer before subscribing
+  to live traffic.
 - Press **Load recent** in the recordings section to fetch recent recorded calls.
   Each row can be played through the card or downloaded as its original audio
   file.
