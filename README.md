@@ -55,6 +55,7 @@ height: 640
 | `talkgroups_entity` | no | `sensor.rdio_scanner_talkgroups` | Talkgroups count sensor |
 | `height` | no | `640` | Iframe height in pixels |
 | `show_header` | no | `true` | Show or hide the card header |
+| `live_header` | no | `false` | Keep updating header values after the iframe loads |
 
 ## Notes
 

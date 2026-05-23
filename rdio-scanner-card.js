@@ -9,6 +9,7 @@ class RdioScannerCard extends HTMLElement {
       talkgroups_entity: "sensor.rdio_scanner_talkgroups",
       height: 640,
       show_header: true,
+      live_header: false,
     };
   }
 
@@ -19,13 +20,14 @@ class RdioScannerCard extends HTMLElement {
     };
     this._rendered = false;
     this._iframeUrl = undefined;
+    this._headerInitialized = false;
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (this._rendered) {
+    if (this._rendered && (!this._headerInitialized || this.config.live_header)) {
       this.updateHeader();
-    } else {
+    } else if (!this._rendered) {
       this.render();
     }
   }
@@ -196,6 +198,7 @@ class RdioScannerCard extends HTMLElement {
     if (statusText) statusText.textContent = status;
     if (systemsText) systemsText.textContent = systems;
     if (talkgroupsText) talkgroupsText.textContent = talkgroups;
+    this._headerInitialized = true;
   }
 
   escape(value) {
