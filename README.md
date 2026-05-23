@@ -41,7 +41,7 @@ Local HTTP dashboard example:
 type: custom:rdio-scanner-card
 mode: native
 title: Rdio Scanner
-url: http://rdio-scanner.local:3000
+url: http://rdio.local:3000
 # ws_url: wss://your-secure-rdio-proxy.example/ws
 # access_code: "your-unlock-code"
 status_entity: sensor.rdio_scanner_status
@@ -81,13 +81,13 @@ field and remembers the code in browser localStorage after you enter it.
 The Home Assistant integration and the dashboard card run in different places:
 
 - The integration runs inside Home Assistant, so it can usually use the local
-  LAN URL, for example `http://rdio-scanner.local:3000`.
+  LAN URL, for example `http://rdio.local:3000`.
 - The dashboard card runs inside the browser, tablet, Fully Kiosk Browser, or
   Home Assistant mobile app. That device must be able to reach the URL in the
   card YAML.
 
 If Home Assistant is loaded over `https://`, mobile WebViews usually block an
-insecure Rdio Scanner WebSocket such as `ws://rdio-scanner.local:3000`. In that case
+insecure Rdio Scanner WebSocket such as `ws://rdio.local:3000`. In that case
 the card may show **Blocked: use WSS** or **Closed 1006**.
 
 For the Home Assistant mobile app, Nabu Casa/external URLs, or HTTPS wall
@@ -102,7 +102,7 @@ audio_mode: html5
 For a LAN-only wall tablet loaded over plain HTTP, the local URL can be used:
 
 ```yaml
-url: http://rdio-scanner.local:3000
+url: http://rdio.local:3000
 audio_mode: auto
 ```
 
@@ -116,7 +116,7 @@ work.
 | `type` | yes | `custom:rdio-scanner-card` | Card type |
 | `mode` | no | `native` | `native` for direct live feed, or `iframe` for the original embedded UI |
 | `title` | no | `Rdio Scanner` | Header title |
-| `url` | no | `http://rdio-scanner.local:3000` | Rdio Scanner URL |
+| `url` | no | `http://rdio.local:3000` | Rdio Scanner URL |
 | `ws_url` | no | derived from `url` | Override WebSocket URL, useful for `wss://` reverse proxies |
 | `access_code` | no | none | Rdio Scanner unlock code for restricted access |
 | `url_entity` | no | none | Entity containing the Rdio Scanner URL |

@@ -6,7 +6,7 @@ class RdioScannerCard extends HTMLElement {
       type: "custom:rdio-scanner-card",
       mode: "native",
       title: "Rdio Scanner",
-      url: "http://192.168.1.49:3000",
+      url: "http://rdio.local:3000",
       ws_url: "",
       access_code: "",
       status_entity: "sensor.rdio_scanner_status",
@@ -76,7 +76,7 @@ class RdioScannerCard extends HTMLElement {
 
   getUrl() {
     const entityUrl = this.value(this.config.url_entity, "");
-    return entityUrl || this.config.url || "http://192.168.1.49:3000";
+    return entityUrl || this.config.url || "http://rdio.local:3000";
   }
 
   getWsUrl() {
