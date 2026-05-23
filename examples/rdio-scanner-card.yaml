@@ -1,13 +1,13 @@
 type: custom:rdio-scanner-card
 mode: native
 title: Rdio Scanner
-url: http://192.168.1.49:3000
-# ws_url: wss://your-secure-rdio-proxy.example/ws
+url: https://radio.example.com
+ws_url: wss://radio.example.com
 status_entity: sensor.rdio_scanner_status
 systems_entity: sensor.rdio_scanner_systems
 talkgroups_entity: sensor.rdio_scanner_talkgroups
-auto_start: true
+auto_start: false
 show_recordings: true
 recordings_limit: 20
-audio_mode: auto
+audio_mode: html5
 show_header: true
