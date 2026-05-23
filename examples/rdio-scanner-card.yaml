@@ -6,4 +6,6 @@ status_entity: sensor.rdio_scanner_status
 systems_entity: sensor.rdio_scanner_systems
 talkgroups_entity: sensor.rdio_scanner_talkgroups
 auto_start: true
+show_recordings: true
+recordings_limit: 20
 show_header: true

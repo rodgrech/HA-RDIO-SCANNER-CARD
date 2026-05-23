@@ -13,6 +13,9 @@ class RdioScannerCard extends HTMLElement {
       show_header: true,
       live_header: false,
       auto_start: true,
+      show_recordings: true,
+      auto_load_recordings: false,
+      recordings_limit: 20,
     };
   }
 
@@ -35,6 +38,8 @@ class RdioScannerCard extends HTMLElement {
     this._authRequired = false;
     this._manualStop = false;
     this._reconnectTimer = undefined;
+    this._recordings = [];
+    this._recordingsLoading = false;
   }
 
   set hass(hass) {
@@ -96,11 +101,14 @@ class RdioScannerCard extends HTMLElement {
           .top{display:${this.config.show_header === false ? "none" : "grid"};grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px;background:#1b2026;border-bottom:1px solid rgba(255,255,255,.08)}
           .title{min-width:0;display:grid;gap:4px}.name{font-size:15px;font-weight:800;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{display:flex;flex-wrap:wrap;gap:8px;color:var(--secondary-text-color);font-size:12px;line-height:1.2}.dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:#ff453a;box-shadow:0 0 8px rgba(255,69,58,.65)}.dot.on{background:#34c759;box-shadow:0 0 8px rgba(52,199,89,.8)}.status{display:inline-flex;align-items:center;gap:6px}
           .actions{display:inline-flex;gap:4px}.actions button,.unlock button,.controls button{height:36px;border:0;border-radius:18px;cursor:pointer;color:var(--primary-text-color);background:rgba(255,255,255,.1);padding:0 12px;font-weight:700}.actions button{width:36px;padding:0}.actions button:hover,.unlock button:hover,.controls button:hover{background:rgba(255,255,255,.16)}
-          .screen{display:grid;grid-template-rows:auto 1fr;gap:12px;padding:14px;background:radial-gradient(circle at 78% 12%,rgba(37,99,235,.18),transparent 28%),#101316}
+          .screen{display:grid;grid-template-rows:auto 1fr auto;gap:12px;padding:14px;background:radial-gradient(circle at 78% 12%,rgba(37,99,235,.18),transparent 28%),#101316}
           .lcd{min-height:142px;display:grid;gap:10px;align-content:center;padding:18px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:#07130d;color:#b7f56f;box-shadow:inset 0 0 28px rgba(89,255,120,.08);font-family:"Courier New",Consolas,monospace}
           .channel{font-size:clamp(26px,7vw,46px);font-weight:900;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.caller{font-size:clamp(16px,4vw,26px);font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.detail{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#7fbd62}
           .unlock{display:none;grid-template-columns:minmax(0,1fr) auto;gap:8px}.unlock.show{display:grid}.unlock input{min-width:0;height:36px;padding:0 11px;border-radius:18px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:var(--primary-text-color)}
           .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.controls .primary{background:#2276d2}.controls .danger{background:#7f2a2a}.queue{margin-left:auto;color:var(--secondary-text-color);font-size:12px}
+          .recordings{display:${this.config.show_recordings === false ? "none" : "grid"};gap:8px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(0,0,0,.18);padding:10px}
+          .recordings-head{display:flex;align-items:center;gap:8px}.recordings-title{font-size:13px;font-weight:800}.recordings-head button{margin-left:auto;height:32px;border:0;border-radius:16px;cursor:pointer;color:var(--primary-text-color);background:rgba(255,255,255,.1);padding:0 11px;font-weight:700}
+          .recordings-list{display:grid;gap:6px;max-height:220px;overflow:auto}.recording{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:7px 8px;border-radius:6px;background:rgba(255,255,255,.06)}.recording-main{min-width:0;display:grid;gap:2px}.recording-title{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.recording-sub{font-size:11px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.recording button{width:32px;height:32px;border:0;border-radius:50%;cursor:pointer;color:var(--primary-text-color);background:rgba(255,255,255,.1);padding:0}
           .foot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid rgba(255,255,255,.08);background:#181d22}.metric{padding:10px 12px;border-right:1px solid rgba(255,255,255,.08)}.metric:last-child{border-right:0}.label{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}.value{margin-top:3px;font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
           ha-icon{--mdc-icon-size:20px;width:20px;height:20px;vertical-align:middle}
         </style>
@@ -135,6 +143,15 @@ class RdioScannerCard extends HTMLElement {
               <button type="button" class="native-skip">Skip</button>
               <span class="queue">Queue: <span class="queue-count">0</span></span>
             </div>
+            <div class="recordings">
+              <div class="recordings-head">
+                <span class="recordings-title">Recordings</span>
+                <button type="button" class="recordings-refresh">Load recent</button>
+              </div>
+              <div class="recordings-list">
+                <div class="recording-empty">No recordings loaded</div>
+              </div>
+            </div>
           </div>
           <div class="foot">
             <div class="metric"><div class="label">Link</div><div class="value link-value">Offline</div></div>
@@ -150,6 +167,7 @@ class RdioScannerCard extends HTMLElement {
     this.querySelector(".native-skip")?.addEventListener("click", () => this.skipCall());
     this.querySelector(".native-reconnect")?.addEventListener("click", () => this.startNative({ reconnect: true, userGesture: true }));
     this.querySelector(".native-open")?.addEventListener("click", () => window.open(this.getUrl(), "_blank", "noopener,noreferrer"));
+    this.querySelector(".recordings-refresh")?.addEventListener("click", () => this.loadRecordings());
     this.querySelector(".unlock-button")?.addEventListener("click", () => this.sendAccessCode());
     this.querySelector(".access-code")?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") this.sendAccessCode();
@@ -267,7 +285,7 @@ class RdioScannerCard extends HTMLElement {
     }
     if (!Array.isArray(message)) return;
 
-    const [command, payload] = message;
+    const [command, payload, flag] = message;
     if (command === "PIN") {
       this._authRequired = true;
       this.updateNativeUi();
@@ -276,12 +294,22 @@ class RdioScannerCard extends HTMLElement {
       this._authRequired = false;
       this._configData = payload;
       this.subscribeAllTalkgroups();
+      if (this.config.auto_load_recordings) this.loadRecordings();
       this.updateNativeUi();
     } else if (command === "LFM") {
       this._live = Boolean(payload);
       this.updateNativeUi();
     } else if (command === "CAL" && payload) {
-      this.queueCall(this.decorateCall(payload));
+      const call = this.decorateCall(payload);
+      if (flag === "d") {
+        this.downloadCall(call);
+      } else {
+        this.queueCall(call, { priority: flag === "p" });
+      }
+    } else if (command === "LCL" && payload) {
+      this._recordingsLoading = false;
+      this._recordings = Array.isArray(payload.results) ? payload.results.map((call) => this.decorateCall(call)) : [];
+      this.updateRecordingsUi();
     } else if (command === "XPR") {
       this._authRequired = true;
       this.setNativeStatus("Access expired");
@@ -319,6 +347,25 @@ class RdioScannerCard extends HTMLElement {
     this._ws.send(JSON.stringify(message));
   }
 
+  loadRecordings() {
+    this._recordingsLoading = true;
+    this.updateRecordingsUi();
+    this.sendWs("LCL", {
+      limit: Math.max(1, Math.min(500, Number(this.config.recordings_limit) || 20)),
+      offset: 0,
+      sort: -1,
+    });
+  }
+
+  playRecording(id) {
+    this.ensureAudio(true);
+    this.sendWs("CAL", `${id}`, "p");
+  }
+
+  requestDownload(id) {
+    this.sendWs("CAL", `${id}`, "d");
+  }
+
   decorateCall(call) {
     const systems = Array.isArray(this._configData?.systems) ? this._configData.systems : [];
     call.systemData = systems.find((system) => system.id === call.system);
@@ -327,11 +374,31 @@ class RdioScannerCard extends HTMLElement {
     return call;
   }
 
-  queueCall(call) {
+  queueCall(call, options = {}) {
     if (!call?.audio?.data) return;
-    this._queue.push(call);
+    if (options.priority) {
+      this._queue.unshift(call);
+    } else {
+      this._queue.push(call);
+    }
     this.updateNativeUi();
     if (!this._call && !this._audioSource) this.playNext();
+  }
+
+  downloadCall(call) {
+    if (!call?.audio?.data) return;
+
+    const bytes = new Uint8Array(call.audio.data);
+    const blob = new Blob([bytes], { type: call.audioType || "audio/*" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = call.audioName || `rdio-call-${call.id || Date.now()}.wav`;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async playNext() {
@@ -429,6 +496,39 @@ class RdioScannerCard extends HTMLElement {
     this.querySelector(".unlock")?.classList.toggle("show", this._authRequired && !this.config.access_code);
   }
 
+  updateRecordingsUi() {
+    const list = this.querySelector(".recordings-list");
+    if (!list) return;
+
+    if (this._recordingsLoading) {
+      list.innerHTML = `<div class="recording-empty">Loading recordings...</div>`;
+      return;
+    }
+
+    if (!this._recordings.length) {
+      list.innerHTML = `<div class="recording-empty">No recordings loaded</div>`;
+      return;
+    }
+
+    list.innerHTML = this._recordings.map((call) => `
+      <div class="recording">
+        <div class="recording-main">
+          <div class="recording-title">${this.escape(this.recordingTitle(call))}</div>
+          <div class="recording-sub">${this.escape(this.recordingSubtitle(call))}</div>
+        </div>
+        <button type="button" class="recording-play" data-id="${this.escape(call.id)}" title="Play"><ha-icon icon="mdi:play"></ha-icon></button>
+        <button type="button" class="recording-download" data-id="${this.escape(call.id)}" title="Download"><ha-icon icon="mdi:download"></ha-icon></button>
+      </div>
+    `).join("");
+
+    list.querySelectorAll(".recording-play").forEach((button) => {
+      button.addEventListener("click", () => this.playRecording(button.dataset.id));
+    });
+    list.querySelectorAll(".recording-download").forEach((button) => {
+      button.addEventListener("click", () => this.requestDownload(button.dataset.id));
+    });
+  }
+
   updateIframeHeader() {
     if (!this._rendered || !this._hass) return;
 
@@ -450,6 +550,19 @@ class RdioScannerCard extends HTMLElement {
       return call.sources.map((source) => source.src).filter(Boolean).join(", ") || "Unknown unit";
     }
     return call.source ? `Unit ${call.source}` : "Unknown unit";
+  }
+
+  recordingTitle(call) {
+    return call?.talkgroupData?.label || call?.talkgroupData?.name || (call?.talkgroup ? `TG ${call.talkgroup}` : `Call ${call?.id || "--"}`);
+  }
+
+  recordingSubtitle(call) {
+    const parts = [
+      call?.systemData?.label || (call?.system ? `System ${call.system}` : ""),
+      call?.dateTime ? new Date(call.dateTime).toLocaleString() : "",
+      this.formatCaller(call),
+    ].filter(Boolean);
+    return parts.join(" - ");
   }
 
   setText(selector, value) {

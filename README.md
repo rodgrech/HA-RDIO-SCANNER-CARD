@@ -43,6 +43,8 @@ status_entity: sensor.rdio_scanner_status
 systems_entity: sensor.rdio_scanner_systems
 talkgroups_entity: sensor.rdio_scanner_talkgroups
 auto_start: true
+show_recordings: true
+recordings_limit: 20
 show_header: true
 ```
 
@@ -67,12 +69,18 @@ field.
 | `show_header` | no | `true` | Show or hide the card header |
 | `live_header` | no | `false` | Keep updating header values after the iframe loads |
 | `auto_start` | no | `true` | Connect and subscribe to all talkgroups when the card loads in native mode |
+| `show_recordings` | no | `true` | Show recent recorded-call controls in native mode |
+| `recordings_limit` | no | `20` | Number of recent recorded calls to request |
+| `auto_load_recordings` | no | `false` | Load recent recordings automatically after connection |
 
 ## Notes
 
 - Native mode uses Rdio Scanner's browser WebSocket protocol directly.
 - Browser autoplay rules may require pressing **Start Live** once before audio
   can play.
+- Press **Load recent** in the recordings section to fetch recent recorded calls.
+  Each row can be played through the card or downloaded as its original audio
+  file.
 - If Home Assistant is served over HTTPS and Rdio Scanner is served over HTTP,
   some browsers may block the connection as mixed content. Use HTTP for both on
   the LAN, or put Rdio Scanner behind HTTPS.
