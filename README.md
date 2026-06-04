@@ -5,6 +5,8 @@
 A HACS dashboard card for running a local Rdio Scanner live feed in Home
 Assistant.
 
+Brand assets for HACS/GitHub are included in `assets/` and `brand/`.
+
 This card pairs with the Rdio Scanner integration:
 
 ```text
