@@ -40,6 +40,7 @@ class RdioScannerCard extends HTMLElement {
     this._htmlAudioPlaying = false;
     this._call = undefined;
     this._queue = [];
+    this._heldTalkgroup = undefined;
     this._configData = undefined;
     this._live = false;
     this._linked = false;
@@ -116,7 +117,7 @@ class RdioScannerCard extends HTMLElement {
           .lcd{min-height:142px;display:grid;gap:10px;align-content:center;padding:18px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:#07130d;color:#b7f56f;box-shadow:inset 0 0 28px rgba(89,255,120,.08);font-family:"Courier New",Consolas,monospace}
           .channel{font-size:clamp(26px,7vw,46px);font-weight:900;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.caller{font-size:clamp(16px,4vw,26px);font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.detail{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#7fbd62}
           .unlock{display:none;grid-template-columns:minmax(0,1fr) auto auto;gap:8px}.unlock.show{display:grid}.unlock input{min-width:0;height:36px;padding:0 11px;border-radius:18px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:var(--primary-text-color)}
-          .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.controls .primary{background:#2276d2}.controls .danger{background:#7f2a2a}.queue{margin-left:auto;color:var(--secondary-text-color);font-size:12px}
+          .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.controls .primary{background:#2276d2}.controls .danger{background:#7f2a2a}.controls .hold.active{background:#b7791f;color:#fff}.controls button:disabled{opacity:.45;cursor:not-allowed}.queue{margin-left:auto;color:var(--secondary-text-color);font-size:12px}
           .recordings{display:${this.config.show_recordings === false ? "none" : "grid"};gap:8px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(0,0,0,.18);padding:10px}
           .recordings-head{display:flex;align-items:center;gap:8px}.recordings-title{font-size:13px;font-weight:800}.recordings-head button{margin-left:auto;height:32px;border:0;border-radius:16px;cursor:pointer;color:var(--primary-text-color);background:rgba(255,255,255,.1);padding:0 11px;font-weight:700}
           .recordings-list{display:grid;gap:6px;max-height:220px;overflow:auto}.recording{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:7px 8px;border-radius:6px;background:rgba(255,255,255,.06)}.recording-main{min-width:0;display:grid;gap:2px}.recording-title{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.recording-sub{font-size:11px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.recording button{width:32px;height:32px;border:0;border-radius:50%;cursor:pointer;color:var(--primary-text-color);background:rgba(255,255,255,.1);padding:0}
@@ -154,6 +155,7 @@ class RdioScannerCard extends HTMLElement {
               <button type="button" class="native-start primary">Start Live</button>
               <button type="button" class="native-stop danger">Stop</button>
               <button type="button" class="native-skip">Skip</button>
+              <button type="button" class="native-hold hold">Hold</button>
               <span class="queue">Queue: <span class="queue-count">0</span></span>
             </div>
             <div class="recordings">
@@ -179,6 +181,7 @@ class RdioScannerCard extends HTMLElement {
     this.querySelector(".native-start")?.addEventListener("click", () => this.startNative({ userGesture: true }));
     this.querySelector(".native-stop")?.addEventListener("click", () => this.stopNative({ reconnect: false, manual: true }));
     this.querySelector(".native-skip")?.addEventListener("click", () => this.skipCall());
+    this.querySelector(".native-hold")?.addEventListener("click", () => this.toggleHold());
     this.querySelector(".native-reconnect")?.addEventListener("click", () => this.startNative({ reconnect: true, userGesture: true }));
     this.querySelector(".native-open")?.addEventListener("click", () => window.open(this.getUrl(), "_blank", "noopener,noreferrer"));
     this.querySelector(".recordings-refresh")?.addEventListener("click", () => this.loadRecordings());
@@ -333,7 +336,7 @@ class RdioScannerCard extends HTMLElement {
       this._authRequired = false;
       this._connectionStatus = "Connected";
       this._configData = payload;
-      this.subscribeAllTalkgroups();
+      this.updateLiveSubscription();
       if (this.config.auto_load_recordings) this.loadRecordings();
       this.updateNativeUi();
     } else if (command === "LFM") {
@@ -412,6 +415,48 @@ class RdioScannerCard extends HTMLElement {
       });
     });
     this.sendWs("LFM", map);
+  }
+
+  updateLiveSubscription() {
+    if (!this._heldTalkgroup) {
+      this.subscribeAllTalkgroups();
+      return;
+    }
+
+    const map = {
+      [this._heldTalkgroup.system]: {
+        [this._heldTalkgroup.talkgroup]: true,
+      },
+    };
+    this.sendWs("LFM", map);
+  }
+
+  toggleHold() {
+    if (this._heldTalkgroup) {
+      this._heldTalkgroup = undefined;
+      this.updateLiveSubscription();
+      this.setNativeStatus("Scanning all talkgroups");
+      this.updateNativeUi();
+      return;
+    }
+
+    if (!this._call?.system || !this._call?.talkgroup) {
+      this.setNativeStatus("Wait for an active call to hold");
+      return;
+    }
+
+    this._heldTalkgroup = {
+      system: this._call.system,
+      talkgroup: this._call.talkgroup,
+      label: this._call.talkgroupData?.label || this._call.talkgroupData?.name || `TG ${this._call.talkgroup}`,
+    };
+    this._queue = this._queue.filter((call) =>
+      `${call.system}` === `${this._heldTalkgroup.system}` &&
+      `${call.talkgroup}` === `${this._heldTalkgroup.talkgroup}`
+    );
+    this.updateLiveSubscription();
+    this.setNativeStatus(`Held on ${this._heldTalkgroup.label}`);
+    this.updateNativeUi();
   }
 
   sendWs(command, payload = undefined, flag = undefined) {
@@ -665,6 +710,15 @@ class RdioScannerCard extends HTMLElement {
     this.setText(".link-value", this._linked ? "Online" : "Offline");
     this.setText(".audio-value", this.isAudioPlaying() ? "Playing" : this._queue.length ? "Queued" : "Idle");
     this.querySelector(".unlock")?.classList.toggle("show", this._authRequired && !this.config.access_code);
+    const holdButton = this.querySelector(".native-hold");
+    if (holdButton) {
+      holdButton.textContent = this._heldTalkgroup ? `Unhold (${this._heldTalkgroup.label})` : "Hold";
+      holdButton.classList.toggle("active", Boolean(this._heldTalkgroup));
+      holdButton.disabled = !this._heldTalkgroup && !call;
+      holdButton.title = this._heldTalkgroup
+        ? `Resume scanning all talkgroups (currently held on ${this._heldTalkgroup.label})`
+        : "Hold on the currently playing talkgroup";
+    }
   }
 
   updateRecordingsUi() {

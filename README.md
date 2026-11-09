@@ -138,6 +138,7 @@ work.
 ## Notes
 
 - Native mode uses Rdio Scanner's browser WebSocket protocol directly.
+- **Hold** locks the live feed to the currently playing talkgroup. The button changes to **Unhold** while active; **Skip** skips the current transmission without releasing the hold.
 - Browser autoplay rules may require pressing **Start Live** once before audio
   can play. The button primes WebAudio with a silent buffer before subscribing
   to live traffic.
